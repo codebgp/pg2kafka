@@ -12,7 +12,7 @@ RUN go build -tags musl -ldflags "-X main.version=$(git rev-parse --short @) -s 
 
 FROM scratch
 
-LABEL maintainer="Ioannis Sermetziadis<ioannis@codebgp.com>"
+LABEL maintainer="dev[at]codebgp[dot]com"
 
 COPY --from=builder /build/pg2kafka /
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
