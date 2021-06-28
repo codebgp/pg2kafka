@@ -4,6 +4,7 @@ AS $_$
 DECLARE
   external_id varchar;
   changes jsonb;
+  state jsonb;
   col record;
   outbound_event record;
 BEGIN
@@ -31,13 +32,15 @@ BEGIN
     changes := '{}'::jsonb;
   END IF;
 
+  state := row_to_json(NEW);
+
   -- Don't enqueue an event for updates that did not change anything
   IF TG_OP = 'UPDATE' AND changes = '{}'::jsonb THEN
     RETURN NULL;
   END IF;
 
-  INSERT INTO pg2kafka.outbound_event_queue(external_id, table_name, statement, data)
-  VALUES (external_id, TG_TABLE_NAME, TG_OP, changes)
+  INSERT INTO pg2kafka.outbound_event_queue(external_id, table_name, statement, data, state)
+  VALUES (external_id, TG_TABLE_NAME, TG_OP, changes, state)
   RETURNING * INTO outbound_event;
 
   PERFORM pg_notify('outbound_event_queue', TG_OP);

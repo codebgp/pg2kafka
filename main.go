@@ -18,7 +18,9 @@ import (
 
 var (
 	topicNamespace string
-	version        string
+	topicVersion   string
+	// Version the app version set at link time
+	Version string
 	// L is the package exposed logger
 	L *zap.Logger
 )
@@ -43,6 +45,7 @@ func main() {
 	}
 
 	conninfo := os.Getenv("DATABASE_URL")
+	topicVersion = os.Getenv("TOPIC_VERSION")
 	topicNamespace = parseTopicNamespace(os.Getenv("TOPIC_NAMESPACE"), parseDatabaseName(conninfo))
 
 	eq, err := eventqueue.New(conninfo)
@@ -88,7 +91,7 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 
-	L.Info(fmt.Sprintf("pg2kafka[commit:%s] is now listening to notifications", version))
+	L.Info(fmt.Sprintf("pg2kafka[commit:%s] is now listening to notifications", Version))
 	waitForNotification(listener, producer, eq, signals)
 }
 
@@ -145,7 +148,7 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 			L.Fatal("Error parsing event", zap.Error(err))
 		}
 
-		topic := topicName(event.TableName)
+		topic := topicName(topicNamespace, event.TableName, topicVersion)
 		message := &kafka.Message{
 			TopicPartition: kafka.TopicPartition{
 				Topic:     &topic,
@@ -200,8 +203,12 @@ func setupProducer() Producer {
 	return p
 }
 
-func topicName(tableName string) string {
-	return fmt.Sprintf("pg2kafka.%v.%v", topicNamespace, tableName)
+func topicName(topicNamespace, tableName, topicVersion string) string {
+	name := fmt.Sprintf("pg2kafka.%v.%v", topicNamespace, tableName)
+	if topicVersion != "" {
+		name = fmt.Sprintf("%s.%s", name, topicVersion)
+	}
+	return name
 }
 
 func parseDatabaseName(conninfo string) string {

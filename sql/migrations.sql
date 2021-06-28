@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS pg2kafka.outbound_event_queue (
   statement     varchar(20) NOT NULL,
   data          jsonb NOT NULL,
   created_at    timestamp NOT NULL DEFAULT current_timestamp,
-  processed     boolean DEFAULT false
+  processed     boolean DEFAULT false,
+  state		jsonb NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS outbound_event_queue_id_index

@@ -7,6 +7,7 @@ import (
 
 	"github.com/buger/jsonparser"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/blendle/pg2kafka/eventqueue"
 	_ "github.com/lib/pq"
@@ -190,4 +191,39 @@ func (p *mockProducer) Produce(msg *kafka.Message, deliveryChan chan kafka.Event
 		deliveryChan <- msg
 	}()
 	return nil
+}
+
+func TestTopicName(t *testing.T) {
+	t.Parallel()
+
+	type testInput struct {
+		topicNamespace string
+		topicVersion   string
+		tableName      string
+	}
+	type test struct {
+		name  string
+		input testInput
+		want  string
+	}
+
+	tests := []test{
+		{
+			name:  "default topic name",
+			input: testInput{topicNamespace: "testNs", tableName: "testName"},
+			want:  "pg2kafka.testNs.testName",
+		},
+		{
+			name:  "topic name with version",
+			input: testInput{topicNamespace: "testNs", tableName: "testName", topicVersion: "v1.0.0"},
+			want:  "pg2kafka.testNs.testName.v1.0.0",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := topicName(tc.input.topicNamespace, tc.input.tableName, tc.input.topicVersion)
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }

@@ -8,7 +8,7 @@ RUN apk add --no-cache build-base && \
 WORKDIR /build
 COPY . .
 
-RUN go build -tags musl -ldflags "-X main.version=$(git rev-parse --short @) -s -extldflags -static" -a -installsuffix cgo .
+RUN go build -trimpath -tags musl -ldflags "-X main.Version=$(git rev-parse --short @) -s -extldflags -static" -a -installsuffix cgo .
 
 FROM scratch
 
