@@ -9,6 +9,7 @@ import (
 	"github.com/blendle/pg2kafka/eventqueue"
 	"github.com/buger/jsonparser"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 )
 
 const selectTriggerNamesQuery = `
@@ -78,12 +79,12 @@ func TestSQL_Trigger_Insert(t *testing.T) {
 		t.Errorf("Expected 'users', got %s", events[0].TableName)
 	}
 
-	email, _ := jsonparser.GetString(events[0].Data, "email")
+	email, _ := jsonparser.GetString(events[0].State, "email")
 	if email != "jurre@blendle.com" {
 		t.Errorf("Expected 'jurre@blendle.com', got %s", email)
 	}
 
-	name, _ := jsonparser.GetString(events[0].Data, "name")
+	name, _ := jsonparser.GetString(events[0].State, "name")
 	if name != "jurre" {
 		t.Errorf("Expected 'jurre', got %s", name)
 	}
@@ -103,7 +104,7 @@ func TestSQL_Trigger_CreateWithNull(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, valueType, _, _ := jsonparser.Get(events[0].Data, "email")
+	_, valueType, _, _ := jsonparser.Get(events[0].State, "email")
 	if valueType != jsonparser.Null {
 		t.Errorf("Expected null, got %v", valueType)
 	}
@@ -132,14 +133,13 @@ func TestSQL_Trigger_UpdateToNull(t *testing.T) {
 		t.Fatalf("Expected 2 events, got %d", len(events))
 	}
 
-	_, valueType, _, _ := jsonparser.Get(events[1].Data, "email")
+	_, valueType, _, _ := jsonparser.Get(events[1].State, "email")
 	if valueType != jsonparser.Null {
 		t.Errorf("Expected null, got %v", valueType)
 	}
 
-	_, valueType, _, _ = jsonparser.Get(events[1].Data, "name")
-	if valueType != jsonparser.NotExist {
-		t.Error("Expected data not to contain key 'name'")
+	if len(events[1].ChangedFields) != 1 || events[1].ChangedFields[0] != "email" {
+		t.Error("Expected changed field email")
 	}
 }
 
@@ -171,12 +171,14 @@ func TestSQL_Trigger_UpdateExtensionColumn(t *testing.T) {
 		t.Fatalf("Expected 2 events, got %d", len(events))
 	}
 
-	if string(events[1].Data) != `{"properties": {"a": "2", "b": "2"}}` {
-		t.Errorf("Data did not match: %q", events[1].Data)
+	properties, _, _, _ := jsonparser.Get(events[1].State, "properties")
+	if string(properties) != `{"a": "2", "b": "2"}` {
+		t.Errorf("Data did not match: %q", properties)
 	}
 
-	if string(events[2].Data) != `{"data": {"foo": "baz"}}` {
-		t.Errorf("Data did not match: %q", events[2].Data)
+	data, _, _, _ := jsonparser.Get(events[2].State, "data")
+	if string(data) != `{"foo": "baz"}` {
+		t.Errorf("Data did not match: %q", data)
 	}
 }
 
@@ -212,13 +214,17 @@ func TestSQL_Snapshot(t *testing.T) {
 		t.Fatalf("Incorrect external id, expected 'duff-1', got '%v'", events[0].ExternalID)
 	}
 
-	_, valueType, _, _ := jsonparser.Get(events[1].Data, "name")
+	_, valueType, _, _ := jsonparser.Get(events[1].State, "name")
 	if valueType != jsonparser.Null {
 		t.Errorf("Expected null, got %v", valueType)
 	}
 
 	if events[2].ExternalID != nil {
 		t.Fatalf("Incorrect external id, expected NULL, got %q", events[2].ExternalID)
+	}
+
+	for _, e := range events {
+		assert.Len(t, e.ChangedFields, 0)
 	}
 }
 

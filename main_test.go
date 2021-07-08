@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/blendle/pg2kafka/eventqueue"
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
 
@@ -20,35 +21,38 @@ func TestFetchUnprocessedRecords(t *testing.T) {
 	// TODO: Use actual trigger to generate this?
 	events := []*eventqueue.Event{
 		{
-			ExternalID: []byte("fefc72b4-d8df-4039-9fb9-bfcb18066a2b"),
-			TableName:  "users",
-			Statement:  "UPDATE",
-			Data:       []byte(`{ "email": "j@blendle.com" }`),
-			Processed:  true,
+			ExternalID:    []byte("fefc72b4-d8df-4039-9fb9-bfcb18066a2b"),
+			TableName:     "users",
+			Statement:     "UPDATE",
+			State:         []byte(`{ "email": "j@blendle.com" }`),
+			ChangedFields: []string{"email"},
+			Processed:     true,
+		},
+		{
+			ExternalID:    []byte("fefc72b4-d8df-4039-9fb9-bfcb18066a2b"),
+			TableName:     "users",
+			Statement:     "UPDATE",
+			State:         []byte(`{ "email": "jurre@blendle.com" }`),
+			ChangedFields: []string{"email"},
 		},
 		{
 			ExternalID: []byte("fefc72b4-d8df-4039-9fb9-bfcb18066a2b"),
 			TableName:  "users",
 			Statement:  "UPDATE",
-			Data:       []byte(`{ "email": "jurre@blendle.com" }`),
-		},
-		{
-			ExternalID: []byte("fefc72b4-d8df-4039-9fb9-bfcb18066a2b"),
-			TableName:  "users",
-			Statement:  "UPDATE",
-			Data:       []byte(`{ "email": "jurres@blendle.com" }`),
+			State:      []byte(`{ "email": "jurres@blendle.com" }`),
 		},
 		{
 			ExternalID: nil,
 			TableName:  "users",
 			Statement:  "CREATE",
-			Data:       []byte(`{ "email": "bart@simpsons.com" }`),
+			State:      []byte(`{ "email": "bart@simpsons.com" }`),
 		},
 		{
-			ExternalID: nil,
-			TableName:  "users",
-			Statement:  "UPDATE",
-			Data:       []byte(`{ "email": "bartman@simpsons.com" }`),
+			ExternalID:    nil,
+			TableName:     "users",
+			Statement:     "UPDATE",
+			State:         []byte(`{ "email": "bartman@simpsons.com" }`),
+			ChangedFields: []string{"email"},
 		},
 	}
 	if err := insert(db, events); err != nil {
@@ -68,7 +72,7 @@ func TestFetchUnprocessedRecords(t *testing.T) {
 	}
 
 	msg := p.messages[0]
-	email, err := jsonparser.GetString(msg.Value, "data", "email")
+	email, err := jsonparser.GetString(msg.Value, "state", "email")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +91,7 @@ func TestFetchUnprocessedRecords(t *testing.T) {
 	}
 
 	msg = p.messages[3]
-	email, err = jsonparser.GetString(msg.Value, "data", "email")
+	email, err = jsonparser.GetString(msg.Value, "state", "email")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,6 +102,22 @@ func TestFetchUnprocessedRecords(t *testing.T) {
 
 	if len(msg.Key) != 0 {
 		t.Errorf("Expected empty key, got %v", msg.Key)
+	}
+
+	for _, msg := range p.messages {
+		statement, _ := jsonparser.GetString(msg.Value, "statement")
+		switch statement {
+		case "CREATE":
+			_, valueType, _, _ := jsonparser.Get(msg.Value, "changed_fields")
+			assert.Equal(t, valueType, jsonparser.Null, "Expected empty for create events")
+		case "UPDATE":
+			_, _ = jsonparser.ArrayEach(msg.Value, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+				assert.Equal(t, value, []byte("email"), "Expected changed fields for update events")
+			}, "changed_fields")
+		default:
+			t.Fatal("Expected only insert and update statement events")
+		}
+
 	}
 }
 
@@ -133,8 +153,8 @@ func insert(db *sql.DB, events []*eventqueue.Event) error {
 		return err
 	}
 	statement, err := tx.Prepare(`
-		INSERT INTO pg2kafka.outbound_event_queue (external_id, table_name, statement, data, processed)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO pg2kafka.outbound_event_queue (external_id, table_name, statement, state, changed_fields, processed)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`)
 	if err != nil {
 		if txerr := tx.Rollback(); txerr != nil {
@@ -144,7 +164,7 @@ func insert(db *sql.DB, events []*eventqueue.Event) error {
 	}
 
 	for _, e := range events {
-		_, serr := statement.Exec(e.ExternalID, e.TableName, e.Statement, e.Data, e.Processed)
+		_, serr := statement.Exec(e.ExternalID, e.TableName, e.Statement, e.State, pq.Array(e.ChangedFields), e.Processed)
 		if serr != nil {
 			if txerr := tx.Rollback(); err != nil {
 				return txerr

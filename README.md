@@ -77,7 +77,8 @@ This will create snapshots of the current data in that table:
   "uuid": "ea76e080-6acd-413a-96b3-131a42ab1002",
   "external_id": "CM01-B",
   "statement": "SNAPSHOT",
-  "data": {
+  "changed_fields":null,
+  "state": {
     "id": 2,
     "sku": "CM01-B",
     "name": "Blue Coffee Mug"
@@ -88,7 +89,8 @@ This will create snapshots of the current data in that table:
   "uuid": "e1c0008d-6b7a-455a-afa6-c1c2eebd65d3",
   "external_id": "CM01-R",
   "statement": "SNAPSHOT",
-  "data": {
+  "changed_fields":null,
+  "state": {
     "id": 1,
     "sku": "CM01-R",
     "name": "Red Coffee Mug"
@@ -109,7 +111,12 @@ UPDATE products SET name = 'Big Red Coffee Mug' WHERE sku = 'CM01-R';
   "uuid": "d6521ce5-4068-45e4-a9ad-c0949033a55b",
   "external_id": "CM01-R",
   "statement": "UPDATE",
-  "data": {
+  "changed_fields": [
+    "name"
+  ]
+  "state": {
+    "id": 1,
+    "sku": "CM01-R",
     "name": "Big Red Coffee Mug"
   },
   "created_at": "2017-11-02T16:15:13.94077Z"
@@ -123,6 +130,9 @@ exists, or else pg2kafka will crash.
 You can optionally prepend a namespace to the Kafka topic, by setting the
 `TOPIC_NAMESPACE` environment variable. When doing this, the final topic name
 would be `pg2kafka.$namespace.$database_name.$table_name`.
+Similarly, you can optionally append a version to the Kafka topic, by setting
+the `TOPIC_VERSION` environment variable. When doing this, the final topic name
+would be `pg2kafka.$namespace.$database_name.$table_name.$version`.
 
 ### Cleanup
 
