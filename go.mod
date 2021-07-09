@@ -1,4 +1,4 @@
-module github.com/blendle/pg2kafka
+module github.com/codebgp/pg2kafka
 
 go 1.16
 

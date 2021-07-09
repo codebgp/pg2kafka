@@ -2,7 +2,10 @@ pre-commit-run-all:
 	GOARCH=amd64 CGO_ENABLED=1 pre-commit run --all-files
 
 install-go-deps:
-	echo "no deps"
+	script/install-go-deps.sh
 
-run-e2e-tests:
-	echo "no e2e tests!"
+test:
+	go test ./... --count=1
+
+integration-tests:
+	script/tests/go-integration-test.sh

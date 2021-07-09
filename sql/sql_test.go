@@ -1,3 +1,5 @@
+// +build integrationtests
+
 package sql_test
 
 import (
@@ -6,8 +8,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/blendle/pg2kafka/eventqueue"
 	"github.com/buger/jsonparser"
+	"github.com/codebgp/pg2kafka/eventqueue"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 )

@@ -1,3 +1,5 @@
+// +build integrationtests
+
 package main
 
 import (
@@ -9,7 +11,7 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/blendle/pg2kafka/eventqueue"
+	"github.com/codebgp/pg2kafka/eventqueue"
 	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
@@ -36,10 +38,11 @@ func TestFetchUnprocessedRecords(t *testing.T) {
 			ChangedFields: []string{"email"},
 		},
 		{
-			ExternalID: []byte("fefc72b4-d8df-4039-9fb9-bfcb18066a2b"),
-			TableName:  "users",
-			Statement:  "UPDATE",
-			State:      []byte(`{ "email": "jurres@blendle.com" }`),
+			ExternalID:    []byte("fefc72b4-d8df-4039-9fb9-bfcb18066a2b"),
+			TableName:     "users",
+			Statement:     "UPDATE",
+			State:         []byte(`{ "email": "jurres@blendle.com" }`),
+			ChangedFields: []string{},
 		},
 		{
 			ExternalID: nil,
@@ -111,9 +114,10 @@ func TestFetchUnprocessedRecords(t *testing.T) {
 			_, valueType, _, _ := jsonparser.Get(msg.Value, "changed_fields")
 			assert.Equal(t, valueType, jsonparser.Null, "Expected empty for create events")
 		case "UPDATE":
-			_, _ = jsonparser.ArrayEach(msg.Value, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
+			_, err = jsonparser.ArrayEach(msg.Value, func(value []byte, dataType jsonparser.ValueType, offset int, err error) {
 				assert.Equal(t, value, []byte("email"), "Expected changed fields for update events")
 			}, "changed_fields")
+			assert.Nil(t, err, "Expected not nil changed_fields")
 		default:
 			t.Fatal("Expected only insert and update statement events")
 		}
