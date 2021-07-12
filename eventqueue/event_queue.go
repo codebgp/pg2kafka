@@ -8,12 +8,13 @@ import (
 	"math"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
 
 const (
 	selectUnprocessedEventsQuery = `
-		SELECT id, uuid, external_id, table_name, statement, data, created_at
+		SELECT id, uuid, external_id, table_name, statement, changed_fields, state, created_at
 		FROM pg2kafka.outbound_event_queue
 		WHERE processed = false
 		ORDER BY id ASC
@@ -39,14 +40,15 @@ type ByteString []byte
 
 // Event represents the queued event in the database
 type Event struct {
-	ID         int             `json:"-"`
-	UUID       string          `json:"uuid"`
-	ExternalID ByteString      `json:"external_id"`
-	TableName  string          `json:"-"`
-	Statement  string          `json:"statement"`
-	Data       json.RawMessage `json:"data"`
-	CreatedAt  time.Time       `json:"created_at"`
-	Processed  bool            `json:"-"`
+	ID            int             `json:"-"`
+	UUID          string          `json:"uuid"`
+	ExternalID    ByteString      `json:"external_id"`
+	TableName     string          `json:"-"`
+	Statement     string          `json:"statement"`
+	ChangedFields []string        `json:"changed_fields"`
+	State         json.RawMessage `json:"state"`
+	CreatedAt     time.Time       `json:"created_at"`
+	Processed     bool            `json:"-"`
 }
 
 // Queue represents the queue of snapshot/create/update/delete events stored in
@@ -87,7 +89,8 @@ func (eq *Queue) FetchUnprocessedRecords() ([]*Event, error) {
 			&msg.ExternalID,
 			&msg.TableName,
 			&msg.Statement,
-			&msg.Data,
+			pq.Array(&msg.ChangedFields),
+			&msg.State,
 			&msg.CreatedAt,
 		)
 		if err != nil {

@@ -5,6 +5,8 @@ github.com/buger/jsonparser
 ## explicit
 github.com/confluentinc/confluent-kafka-go/kafka
 github.com/confluentinc/confluent-kafka-go/kafka/librdkafka_vendor
+# github.com/davecgh/go-spew v1.1.1
+github.com/davecgh/go-spew/spew
 # github.com/lib/pq v1.10.2
 ## explicit
 github.com/lib/pq
@@ -13,6 +15,11 @@ github.com/lib/pq/scram
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
+# github.com/stretchr/testify v1.7.0
+## explicit
+github.com/stretchr/testify/assert
 # go.uber.org/atomic v1.7.0
 go.uber.org/atomic
 # go.uber.org/multierr v1.7.0
@@ -28,3 +35,5 @@ go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit
+# gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+gopkg.in/yaml.v3

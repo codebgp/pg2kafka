@@ -3,7 +3,8 @@ LANGUAGE plpgsql
 AS $_$
 DECLARE
   external_id varchar;
-  changes jsonb;
+  changed_fields varchar ARRAY;
+  state jsonb;
   col record;
   outbound_event record;
 BEGIN
@@ -18,26 +19,27 @@ BEGIN
   END IF;
 
   IF TG_OP = 'INSERT' THEN
-    changes := row_to_json(NEW);
+    state := row_to_json(NEW);
   ELSIF TG_OP = 'UPDATE' THEN
-    changes := row_to_json(NEW);
+    state := row_to_json(NEW);
+    changed_fields := ARRAY[]::text[];
     -- Remove object that didn't change
     FOR col IN SELECT * FROM jsonb_each(row_to_json(OLD)::jsonb) LOOP
-      IF changes->col.key = col.value THEN
-        changes = changes - col.key;
+      IF state->col.key != col.value THEN
+        changed_fields := array_append(changed_fields, col.key::varchar);
       END IF;
     END LOOP;
   ELSIF TG_OP = 'DELETE' THEN
-    changes := '{}'::jsonb;
+    state := '{}'::jsonb;
   END IF;
 
   -- Don't enqueue an event for updates that did not change anything
-  IF TG_OP = 'UPDATE' AND changes = '{}'::jsonb THEN
+  IF TG_OP = 'UPDATE' AND array_length(changed_fields, 1) IS NULL THEN
     RETURN NULL;
   END IF;
 
-  INSERT INTO pg2kafka.outbound_event_queue(external_id, table_name, statement, data)
-  VALUES (external_id, TG_TABLE_NAME, TG_OP, changes)
+  INSERT INTO pg2kafka.outbound_event_queue(external_id, table_name, statement, changed_fields, state)
+  VALUES (external_id, TG_TABLE_NAME, TG_OP, changed_fields, state)
   RETURNING * INTO outbound_event;
 
   PERFORM pg_notify('outbound_event_queue', TG_OP);
@@ -52,7 +54,7 @@ AS $_$
 DECLARE
   query text;
   rec record;
-  changes jsonb;
+  state jsonb;
   external_id_ref varchar;
   external_id varchar;
 BEGIN
@@ -63,11 +65,11 @@ BEGIN
   query := 'SELECT * FROM ' || table_name_ref;
 
   FOR rec IN EXECUTE query LOOP
-    changes := row_to_json(rec);
-    external_id := changes->>external_id_ref;
+    state := row_to_json(rec);
+    external_id := state->>external_id_ref;
 
-    INSERT INTO pg2kafka.outbound_event_queue(external_id, table_name, statement, data)
-    VALUES (external_id, table_name_ref, 'SNAPSHOT', changes);
+    INSERT INTO pg2kafka.outbound_event_queue(external_id, table_name, statement, state)
+    VALUES (external_id, table_name_ref, 'SNAPSHOT', state);
   END LOOP;
 
   PERFORM pg_notify('outbound_event_queue', 'SNAPSHOT');
