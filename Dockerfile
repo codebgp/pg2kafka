@@ -3,6 +3,7 @@ FROM golang:1.15-alpine AS builder
 # needed for gcc
 RUN apk add --no-cache build-base && \
     apk add --no-cache git && \
+    apk add --no-cache curl && \
     apk add --no-cache --upgrade bash
 
 WORKDIR /build

@@ -6,10 +6,12 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/codebgp/pg2kafka/eventqueue"
+	"github.com/codebgp/pg2kafka/http"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -42,6 +44,16 @@ func main() {
 	}
 	if err != nil {
 		L.Fatal("Error setting up logger", zap.Error(err))
+	}
+	httpPortStr, ok := os.LookupEnv("HTTP_PORT")
+	if !ok {
+		L.Error("WARNING: empty HTTP_PORT env var\n")
+		return
+	}
+	httpPort, err := strconv.Atoi(httpPortStr)
+	if err != nil {
+		L.Error("WARNING: not integer HTTP_PORT env var\n")
+		return
 	}
 
 	conninfo := os.Getenv("DATABASE_URL")
@@ -92,6 +104,18 @@ func main() {
 	signal.Notify(signals, os.Interrupt)
 
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] is now listening to notifications", Version))
+
+	// http server
+	routes := http.LoadDefaultRoutes()
+	var httpDone = make(chan struct{})
+	go func() {
+		err = serveHTTP(httpPort, routes, httpDone)
+		if err != nil {
+			L.Error("http server errored out")
+		}
+		close(httpDone)
+	}()
+
 	waitForNotification(listener, producer, eq, signals)
 }
 
@@ -226,4 +250,12 @@ func parseTopicNamespace(topicNamespace string, databaseName string) string {
 	}
 
 	return s
+}
+
+func serveHTTP(port int, routes *[]http.Route, done <-chan struct{}) error {
+	server, err := http.NewServer(port, routes)
+	if err != nil {
+		return err
+	}
+	return server.Run(done)
 }
