@@ -11,10 +11,11 @@ COPY . .
 
 RUN go build -trimpath -tags musl -ldflags "-X main.Version=$(git rev-parse --short @) -s -extldflags -static" -a -installsuffix cgo .
 
-FROM scratch
+FROM alpine:3.14
 
 LABEL maintainer="dev[at]codebgp[dot]com"
 
+RUN apk add --no-cache curl
 COPY --from=builder /build/pg2kafka /
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ENTRYPOINT ["/pg2kafka"]
