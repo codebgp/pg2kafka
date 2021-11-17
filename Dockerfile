@@ -1,4 +1,4 @@
-FROM golang:1.15-alpine AS builder
+FROM golang:1.17-alpine3.14 AS builder
 
 # needed for gcc
 RUN apk add --no-cache build-base && \

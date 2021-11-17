@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/codebgp/pg2kafka/eventqueue"
+	"github.com/codebgp/pg2kafka/healthcheck"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -90,6 +91,11 @@ func main() {
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
+
+	// Setup healthcheck provider and gracefully stop
+	var done = make(chan struct{})
+	defer close(done)
+	healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
 
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] is now listening to notifications", Version))
 	waitForNotification(listener, producer, eq, signals)
