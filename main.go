@@ -151,7 +151,7 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 	for _, event := range events {
 		msg, err := json.Marshal(event)
 		if err != nil {
-			L.Fatal("Error parsing event", zap.Error(err))
+			L.Fatal("Error serialising event", zap.Error(err))
 		}
 
 		topic := topicName(topicNamespace, event.TableName, topicVersion)
@@ -169,18 +169,18 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 		} else {
 			err = p.Produce(message, deliveryChan)
 			if err != nil {
-				L.Fatal("Failed to produce", zap.Error(err))
+				L.Fatal("Failed to produce", zap.Error(err), zap.String("topic", topic))
 			}
 			e := <-deliveryChan
 
 			result := e.(*kafka.Message)
 			if result.TopicPartition.Error != nil {
-				L.Fatal("Delivery failed", zap.Error(result.TopicPartition.Error))
+				L.Fatal("Delivery failed", zap.Error(result.TopicPartition.Error), zap.String("topic", topic))
 			}
 		}
 		err = eq.MarkEventAsProcessed(event.ID)
 		if err != nil {
-			L.Fatal("Error marking record as processed", zap.Error(err))
+			L.Fatal("Error marking record as processed", zap.Error(err), zap.Int("id", event.ID))
 		}
 	}
 }
