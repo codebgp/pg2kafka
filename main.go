@@ -86,19 +86,23 @@ func main() {
 		}
 	}()
 
+	var done = make(chan struct{})
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt)
+	go func() {
+		<-signals
+		close(done)
+	}()
+
+	// Setup healthcheck provider and gracefully stop
+	healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
+	L.Info(fmt.Sprintf("pg2kafka[commit:%s] started", Version))
+
 	// Process any events left in the queue
 	processQueue(producer, eq)
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
-
-	// Setup healthcheck provider and gracefully stop
-	var done = make(chan struct{})
-	defer close(done)
-	healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
-
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] is now listening to notifications", Version))
-	waitForNotification(listener, producer, eq, signals)
+	waitForNotification(listener, producer, eq, done)
 }
 
 // ProcessEvents queries the database for unprocessed events and produces them
@@ -127,7 +131,7 @@ func waitForNotification(
 	l *pq.Listener,
 	p Producer,
 	eq *eventqueue.Queue,
-	signals chan os.Signal,
+	done chan struct{},
 ) {
 	for {
 		select {
@@ -140,7 +144,7 @@ func waitForNotification(
 					L.Fatal("Error pinging listener", zap.Error(err))
 				}
 			}()
-		case <-signals:
+		case <-done:
 			return
 		}
 	}
