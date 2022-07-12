@@ -95,7 +95,7 @@ func main() {
 	}()
 
 	// Setup healthcheck provider and gracefully stop
-	healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
+	_ = healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] started", Version))
 
 	// Process any events left in the queue
