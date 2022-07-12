@@ -99,6 +99,8 @@ func main() {
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] started", Version))
 
 	// Process any events left in the queue
+	// TODO: the process cannot be abort while processing the accummulated queue.
+	// This can cause ungraceful termination of the process.
 	processQueue(producer, eq)
 
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] is now listening to notifications", Version))
