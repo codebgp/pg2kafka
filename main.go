@@ -45,6 +45,12 @@ func main() {
 		L.Fatal("Error setting up logger", zap.Error(err))
 	}
 
+	// done channel can signal termination to go routines reading it
+	var done = make(chan struct{})
+
+	// Setup healthcheck provider
+	_ = healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
+
 	conninfo := os.Getenv("DATABASE_URL")
 	topicVersion = os.Getenv("TOPIC_VERSION")
 	topicNamespace = parseTopicNamespace(os.Getenv("TOPIC_NAMESPACE"), parseDatabaseName(conninfo))
@@ -86,19 +92,21 @@ func main() {
 		}
 	}()
 
-	// Process any events left in the queue
-	processQueue(producer, eq)
-
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
+	go func() {
+		<-signals
+		close(done)
+	}()
 
-	// Setup healthcheck provider and gracefully stop
-	var done = make(chan struct{})
-	defer close(done)
-	healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
+	L.Info(fmt.Sprintf("pg2kafka[commit:%s] started", Version))
+	// Process any events left in the queue
+	// TODO: the process cannot be abort while processing the accummulated queue.
+	// This can cause ungraceful termination of the process.
+	processQueue(producer, eq)
 
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] is now listening to notifications", Version))
-	waitForNotification(listener, producer, eq, signals)
+	waitForNotification(listener, producer, eq, done)
 }
 
 // ProcessEvents queries the database for unprocessed events and produces them
@@ -127,7 +135,7 @@ func waitForNotification(
 	l *pq.Listener,
 	p Producer,
 	eq *eventqueue.Queue,
-	signals chan os.Signal,
+	done chan struct{},
 ) {
 	for {
 		select {
@@ -140,7 +148,7 @@ func waitForNotification(
 					L.Fatal("Error pinging listener", zap.Error(err))
 				}
 			}()
-		case <-signals:
+		case <-done:
 			return
 		}
 	}
@@ -151,7 +159,7 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 	for _, event := range events {
 		msg, err := json.Marshal(event)
 		if err != nil {
-			L.Fatal("Error parsing event", zap.Error(err))
+			L.Fatal("Error serialising event", zap.Error(err))
 		}
 
 		topic := topicName(topicNamespace, event.TableName, topicVersion)
@@ -169,18 +177,18 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 		} else {
 			err = p.Produce(message, deliveryChan)
 			if err != nil {
-				L.Fatal("Failed to produce", zap.Error(err))
+				L.Fatal("Failed to produce", zap.Error(err), zap.String("topic", topic))
 			}
 			e := <-deliveryChan
 
 			result := e.(*kafka.Message)
 			if result.TopicPartition.Error != nil {
-				L.Fatal("Delivery failed", zap.Error(result.TopicPartition.Error))
+				L.Fatal("Delivery failed", zap.Error(result.TopicPartition.Error), zap.String("topic", topic))
 			}
 		}
 		err = eq.MarkEventAsProcessed(event.ID)
 		if err != nil {
-			L.Fatal("Error marking record as processed", zap.Error(err))
+			L.Fatal("Error marking record as processed", zap.Error(err), zap.Int("id", event.ID))
 		}
 	}
 }
