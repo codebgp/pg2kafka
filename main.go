@@ -45,6 +45,12 @@ func main() {
 		L.Fatal("Error setting up logger", zap.Error(err))
 	}
 
+	// done channel can signal termination to go routines reading it
+	var done = make(chan struct{})
+
+	// Setup healthcheck provider
+	_ = healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
+
 	conninfo := os.Getenv("DATABASE_URL")
 	topicVersion = os.Getenv("TOPIC_VERSION")
 	topicNamespace = parseTopicNamespace(os.Getenv("TOPIC_NAMESPACE"), parseDatabaseName(conninfo))
@@ -86,7 +92,6 @@ func main() {
 		}
 	}()
 
-	var done = make(chan struct{})
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 	go func() {
@@ -94,10 +99,7 @@ func main() {
 		close(done)
 	}()
 
-	// Setup healthcheck provider and gracefully stop
-	_ = healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] started", Version))
-
 	// Process any events left in the queue
 	// TODO: the process cannot be abort while processing the accummulated queue.
 	// This can cause ungraceful termination of the process.
