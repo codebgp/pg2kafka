@@ -147,6 +147,11 @@ func waitForNotification(
 				if err != nil {
 					L.Fatal("Error pinging listener", zap.Error(err))
 				}
+				count, err := eq.CountUnprocessedEvents()
+				if err != nil {
+					L.Fatal("Error fetching count of unprocessed events", zap.Error(err))
+				}
+				L.Info("Unprocessed events in queue", zap.Any("count", count))
 			}()
 		case <-done:
 			return
@@ -186,9 +191,9 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 				L.Fatal("Delivery failed", zap.Error(result.TopicPartition.Error), zap.String("topic", topic))
 			}
 		}
-		err = eq.MarkEventAsProcessed(event.ID)
+		err = eq.DeleteEvent(event.ID)
 		if err != nil {
-			L.Fatal("Error marking record as processed", zap.Error(err), zap.Int("id", event.ID))
+			L.Fatal("Error deleting record", zap.Error(err), zap.Int("id", event.ID))
 		}
 	}
 }
