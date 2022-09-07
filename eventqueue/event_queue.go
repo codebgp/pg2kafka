@@ -27,6 +27,11 @@ const (
 		WHERE id = $1 AND processed = false
 	`
 
+	deleteEventQuery = `
+		DELETE FROM pg2kafka.outbound_event_queue
+		WHERE id = $1
+	`
+
 	countUnprocessedEventsQuery = `
 		SELECT count(*) AS count
 		FROM pg2kafka.outbound_event_queue
@@ -109,19 +114,33 @@ func (eq *Queue) FetchUnprocessedRecords() ([]*Event, error) {
 // queued in the database. Currently page-size is hard-coded to 1000 events per
 // page.
 func (eq *Queue) UnprocessedEventPagesCount() (int, error) {
+	count, err := eq.CountUnprocessedEvents()
+	if err != nil {
+		return 0, err
+	}
+	limit := 1000
+	return int(math.Ceil(float64(count) / float64(limit))), nil
+}
+
+// CountUnprocessedEvents queries and returns the amount of unprocessed events.
+func (eq *Queue) CountUnprocessedEvents() (int, error) {
 	count := 0
 	err := eq.db.QueryRow(countUnprocessedEventsQuery).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
-
-	limit := 1000
-	return int(math.Ceil(float64(count) / float64(limit))), nil
+	return count, nil
 }
 
 // MarkEventAsProcessed marks an even as processed.
 func (eq *Queue) MarkEventAsProcessed(eventID int) error {
 	_, err := eq.db.Exec(markEventAsProcessedQuery, eventID)
+	return err
+}
+
+// DeleteEvent deletes an event.
+func (eq *Queue) DeleteEvent(eventID int) error {
+	_, err := eq.db.Exec(deleteEventQuery, eventID)
 	return err
 }
 
