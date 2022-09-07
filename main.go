@@ -147,11 +147,11 @@ func waitForNotification(
 			go func() {
 				err := l.Ping()
 				if err != nil {
-					L.Fatal("Error pinging listener", zap.Error(err))
+					L.Error("Error pinging listener", zap.Error(err))
 				}
 				count, err := eq.CountUnprocessedEvents()
 				if err != nil {
-					L.Fatal("Error fetching count of unprocessed events", zap.Error(err))
+					L.Error("Error fetching count of unprocessed events", zap.Error(err))
 				}
 				L.Info("Unprocessed events in queue", zap.Any("count", count))
 			}()
