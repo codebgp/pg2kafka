@@ -54,14 +54,15 @@ func (s *Server) Run(done <-chan struct{}) error {
 		}
 	}()
 
-	fmt.Printf("Server started\n")
+	// TODO replace with logging
+	// fmt.Printf("Server started\n")
 
 	select {
 	case err := <-errors:
 		return err
 	case <-done:
-		fmt.Printf("Server stopped\n")
-
+		// TODO replace with logging
+		// fmt.Printf("Server stopped\n")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer func() {
 			cancel()
@@ -70,7 +71,8 @@ func (s *Server) Run(done <-chan struct{}) error {
 		if err := s.srv.Shutdown(ctx); err != nil {
 			return err
 		}
-		fmt.Printf("Server exited properly")
+		// TODO replace with logging
+		// fmt.Printf("Server exited properly")
 		return nil
 	}
 }
