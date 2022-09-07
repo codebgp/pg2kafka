@@ -57,11 +57,11 @@ func main() {
 
 	eq, err := eventqueue.New(conninfo)
 	if err != nil {
-		L.Fatal("Error opening db connection", zap.Error(err))
+		L.Fatal("Error opening event queue db connection", zap.Error(err))
 	}
 	defer func() {
 		if cerr := eq.Close(); cerr != nil {
-			L.Fatal("Error closing db connection", zap.Error(cerr))
+			L.Fatal("Error closing event queue db connection", zap.Error(cerr))
 		}
 	}()
 
@@ -79,14 +79,14 @@ func main() {
 
 	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
-			L.Error("Error handling postgres notify", zap.Error(err))
+			L.Info("Received postgres error notify", zap.Any("event", pqNotifyEventToString(ev)), zap.Error(err))
 			return
 		}
 		L.Info("Received postgres notify event", zap.Any("event", pqNotifyEventToString(ev)))
 	}
 	listener := pq.NewListener(conninfo, 10*time.Second, time.Minute, reportProblem)
 	if err := listener.Listen("outbound_event_queue"); err != nil {
-		L.Error("Error listening to pg", zap.Error(err))
+		L.Fatal("Error listening to pg", zap.Error(err))
 	}
 	defer func() {
 		if cerr := listener.Close(); cerr != nil {
@@ -116,7 +116,8 @@ func main() {
 func ProcessEvents(p Producer, eq *eventqueue.Queue) {
 	events, err := eq.FetchUnprocessedRecords()
 	if err != nil {
-		L.Error("Error listening to pg", zap.Error(err))
+		L.Error("Failed to fetch unprocessed records", zap.Error(err))
+		return
 	}
 
 	produceMessages(p, events, eq)
@@ -125,7 +126,7 @@ func ProcessEvents(p Producer, eq *eventqueue.Queue) {
 func processQueue(p Producer, eq *eventqueue.Queue) {
 	pageCount, err := eq.UnprocessedEventPagesCount()
 	if err != nil {
-		L.Fatal("Error selecting count", zap.Error(err))
+		L.Error("Failed to fetch unprocessed record pages", zap.Error(err))
 	}
 
 	for i := 0; i <= pageCount; i++ {
@@ -147,12 +148,13 @@ func waitForNotification(
 			go func() {
 				err := l.Ping()
 				if err != nil {
-					L.Error("Error pinging listener", zap.Error(err))
+					L.Info("Failed pinging listener", zap.Error(err))
 					return
 				}
 				count, err := eq.CountUnprocessedEvents()
-				if err == nil {
-					L.Error("Error fetching count of unprocessed events", zap.Error(err))
+				if err != nil {
+					L.Info("Failed fetching count of unprocessed events", zap.Error(err))
+					return
 				}
 				L.Info("Unprocessed events in queue", zap.Any("count", count))
 			}()
@@ -167,7 +169,8 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 	for _, event := range events {
 		msg, err := json.Marshal(event)
 		if err != nil {
-			L.Fatal("Error serialising event", zap.Error(err))
+			L.Error("Error serialising event", zap.Error(err))
+			continue
 		}
 
 		topic := topicName(topicNamespace, event.TableName, topicVersion)
@@ -185,18 +188,21 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 		} else {
 			err = p.Produce(message, deliveryChan)
 			if err != nil {
-				L.Fatal("Failed to produce", zap.Error(err), zap.String("topic", topic))
+				L.Error("Failed to produce", zap.Error(err), zap.String("topic", topic))
+				continue
 			}
 			e := <-deliveryChan
 
 			result := e.(*kafka.Message)
 			if result.TopicPartition.Error != nil {
-				L.Fatal("Delivery failed", zap.Error(result.TopicPartition.Error), zap.String("topic", topic))
+				L.Error("Delivery failed", zap.Error(result.TopicPartition.Error), zap.String("topic", topic))
+				continue
 			}
 		}
 		err = eq.DeleteEvent(event.ID)
 		if err != nil {
-			L.Fatal("Error deleting record", zap.Error(err), zap.Int("id", event.ID))
+			L.Error("Error deleting record", zap.Error(err), zap.Int("id", event.ID))
+			continue
 		}
 	}
 }
