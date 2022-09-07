@@ -95,6 +95,7 @@ func main() {
 		if cerr := listener.Close(); cerr != nil {
 			L.Error("Error closing listener", zap.Error(cerr))
 		}
+		L.Info(fmt.Sprintf("pg2kafka[commit:%s] stopped", Version))
 	}()
 
 	signals := make(chan os.Signal, 1)
