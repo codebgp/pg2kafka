@@ -46,7 +46,10 @@ func main() {
 	}
 
 	// done channel can signal termination to go routines reading it
-	var done = make(chan struct{})
+	var (
+		done   = make(chan struct{})
+		errors = make(chan error, 1)
+	)
 
 	// Setup healthcheck provider
 	_ = healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
@@ -105,33 +108,49 @@ func main() {
 	// Process any events left in the queue
 	// TODO: the process cannot be abort while processing the accummulated queue.
 	// This can cause ungraceful termination of the process.
-	processQueue(producer, eq)
+	err = processQueue(producer, eq)
+	if err != nil {
+		errors <- err
+	}
 
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] is now listening to notifications", Version))
-	waitForNotification(listener, producer, eq, done)
+	waitForNotification(listener, producer, eq, done, errors)
 }
 
 // ProcessEvents queries the database for unprocessed events and produces them
 // to kafka.
-func ProcessEvents(p Producer, eq *eventqueue.Queue) {
+func ProcessEvents(p Producer, eq *eventqueue.Queue) error {
 	events, err := eq.FetchUnprocessedRecords()
 	if err != nil {
 		L.Error("Failed to fetch unprocessed records", zap.Error(err))
-		return
+		return err
 	}
 
-	produceMessages(p, events, eq)
+	err = produceMessages(p, events, eq)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func processQueue(p Producer, eq *eventqueue.Queue) {
+func processQueue(p Producer, eq *eventqueue.Queue) error {
+	L.Debug("Starting queue processing")
 	pageCount, err := eq.UnprocessedEventPagesCount()
 	if err != nil {
 		L.Error("Failed to fetch unprocessed record pages", zap.Error(err))
+		return err
 	}
 
 	for i := 0; i <= pageCount; i++ {
-		ProcessEvents(p, eq)
+		err = ProcessEvents(p, eq)
+		if err != nil {
+			return err
+		}
 	}
+
+	L.Debug("Finished queue processing")
+	return nil
 }
 
 func waitForNotification(
@@ -139,11 +158,22 @@ func waitForNotification(
 	p Producer,
 	eq *eventqueue.Queue,
 	done chan struct{},
+	errors chan error,
 ) {
 	for {
 		select {
 		case <-l.Notify:
-			processQueue(p, eq)
+			emptyNotificationsChannel(l.Notify, 100*time.Millisecond)
+			err := processQueue(p, eq)
+			if err != nil && len(errors) == 0 {
+				errors <- err
+			}
+		case <-errors:
+			emptyNotificationsChannel(l.Notify, 100*time.Millisecond)
+			err := processQueue(p, eq)
+			if err != nil && len(errors) == 0 {
+				errors <- err
+			}
 		case <-time.After(90 * time.Second):
 			go func() {
 				err := l.Ping()
@@ -164,13 +194,13 @@ func waitForNotification(
 	}
 }
 
-func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queue) {
+func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queue) error {
 	deliveryChan := make(chan kafka.Event)
 	for _, event := range events {
 		msg, err := json.Marshal(event)
 		if err != nil {
 			L.Error("Error serialising event", zap.Error(err))
-			continue
+			return err
 		}
 
 		topic := topicName(topicNamespace, event.TableName, topicVersion)
@@ -189,22 +219,24 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 			err = p.Produce(message, deliveryChan)
 			if err != nil {
 				L.Error("Failed to produce", zap.Error(err), zap.String("topic", topic))
-				continue
+				return err
 			}
 			e := <-deliveryChan
 
 			result := e.(*kafka.Message)
 			if result.TopicPartition.Error != nil {
 				L.Error("Delivery failed", zap.Error(result.TopicPartition.Error), zap.String("topic", topic))
-				continue
+				return err
 			}
 		}
 		err = eq.DeleteEvent(event.ID)
 		if err != nil {
 			L.Error("Error deleting record", zap.Error(err), zap.Int("id", event.ID))
-			continue
+			return err
 		}
 	}
+
+	return nil
 }
 
 func setupProducer() Producer {
@@ -268,5 +300,19 @@ func pqNotifyEventToString(ev pq.ListenerEventType) string {
 		return "reconnected"
 	default:
 		return "unknown"
+	}
+}
+
+func emptyNotificationsChannel(nc <-chan *pq.Notification, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	for {
+		select {
+		case _, open := <-nc:
+			if !open {
+				return
+			}
+		case <-timer.C:
+			return
+		}
 	}
 }

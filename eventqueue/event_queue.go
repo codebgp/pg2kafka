@@ -13,6 +13,8 @@ import (
 )
 
 const (
+	pageSize = 1000
+
 	selectUnprocessedEventsQuery = `
 		SELECT id, uuid, external_id, table_name, statement, changed_fields, state, created_at
 		FROM pg2kafka.outbound_event_queue
@@ -118,8 +120,7 @@ func (eq *Queue) UnprocessedEventPagesCount() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	limit := 1000
-	return int(math.Ceil(float64(count) / float64(limit))), nil
+	return int(math.Ceil(float64(count) / float64(pageSize))), nil
 }
 
 // CountUnprocessedEvents queries and returns the amount of unprocessed events.
