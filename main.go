@@ -222,7 +222,14 @@ func produceMessages(p Producer, events []*eventqueue.Event, eq *eventqueue.Queu
 				L.Error("Failed to produce", zap.Error(err), zap.String("topic", topic))
 				return err
 			}
-			e := <-deliveryChan
+
+			var e kafka.Event
+			select {
+			case e = <-deliveryChan:
+			case <-time.After(time.Second):
+				L.Error("Failed to produce", zap.Any("message", "delivery report timed out"))
+				return err
+			}
 
 			result := e.(*kafka.Message)
 			if result.TopicPartition.Error != nil {
