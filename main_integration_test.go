@@ -20,16 +20,7 @@ func TestFetchUnprocessedRecords(t *testing.T) {
 	db, eq, cleanup := setup(t)
 	defer cleanup()
 
-	// TODO: Use actual trigger to generate this?
 	events := []*eventqueue.Event{
-		{
-			ExternalID:    []byte("fefc72b4-d8df-4039-9fb9-bfcb18066a2b"),
-			TableName:     "users",
-			Statement:     "UPDATE",
-			State:         []byte(`{ "email": "j@blendle.com" }`),
-			ChangedFields: []string{"email"},
-			Processed:     true,
-		},
 		{
 			ExternalID:    []byte("fefc72b4-d8df-4039-9fb9-bfcb18066a2b"),
 			TableName:     "users",
