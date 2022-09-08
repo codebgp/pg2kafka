@@ -16,15 +16,8 @@ const (
 	selectUnprocessedEventsQuery = `
 		SELECT id, uuid, external_id, table_name, statement, changed_fields, state, created_at
 		FROM pg2kafka.outbound_event_queue
-		WHERE processed = false
 		ORDER BY id ASC
 		LIMIT 1000
-	`
-
-	markEventAsProcessedQuery = `
-		UPDATE pg2kafka.outbound_event_queue
-		SET processed = true
-		WHERE id = $1 AND processed = false
 	`
 
 	deleteEventQuery = `
@@ -35,7 +28,6 @@ const (
 	countUnprocessedEventsQuery = `
 		SELECT count(*) AS count
 		FROM pg2kafka.outbound_event_queue
-		WHERE processed IS FALSE
 	`
 )
 
@@ -130,12 +122,6 @@ func (eq *Queue) CountUnprocessedEvents() (int, error) {
 		return 0, err
 	}
 	return count, nil
-}
-
-// MarkEventAsProcessed marks an even as processed.
-func (eq *Queue) MarkEventAsProcessed(eventID int) error {
-	_, err := eq.db.Exec(markEventAsProcessedQuery, eventID)
-	return err
 }
 
 // DeleteEvent deletes an event.

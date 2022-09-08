@@ -79,8 +79,10 @@ func main() {
 
 	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
-			L.Error("Error handling postgres notify", zap.Error(err))
+			L.Info("Received postgres error notify", zap.Any("event", pqNotifyEventToString(ev)), zap.Error(err))
+			return
 		}
+		L.Info("Received postgres notify event", zap.Any("event", pqNotifyEventToString(ev)))
 	}
 	listener := pq.NewListener(conninfo, 10*time.Second, time.Minute, reportProblem)
 	if err := listener.Listen("outbound_event_queue"); err != nil {
@@ -140,6 +142,7 @@ func waitForNotification(
 	for {
 		select {
 		case <-l.Notify:
+			drainNotificationChannel(l.Notify, 100*time.Millisecond)
 			processQueue(p, eq)
 		case <-time.After(90 * time.Second):
 			go func() {
@@ -245,4 +248,33 @@ func parseTopicNamespace(topicNamespace string, databaseName string) string {
 	}
 
 	return s
+}
+
+func drainNotificationChannel(nc <-chan *pq.Notification, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	for {
+		select {
+		case _, open := <-nc:
+			if len(nc) == 0 || !open {
+				return
+			}
+		case <-timer.C:
+			return
+		}
+	}
+}
+
+func pqNotifyEventToString(ev pq.ListenerEventType) string {
+	switch ev {
+	case pq.ListenerEventConnected:
+		return "connected"
+	case pq.ListenerEventDisconnected:
+		return "disconnected"
+	case pq.ListenerEventConnectionAttemptFailed:
+		return "connection attempt failed"
+	case pq.ListenerEventReconnected:
+		return "reconnected"
+	default:
+		return "unknown"
+	}
 }
