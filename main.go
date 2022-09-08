@@ -106,8 +106,8 @@ func main() {
 	}()
 
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] started", Version))
-	// Process any events left in the queue
-	// TODO: the process cannot be abort while processing the accummulated queue.
+	// Process any events in the queue
+	// TODO: the process cannot be aborted while processing the accummulated queue.
 	// This can cause ungraceful termination of the process.
 	err = processQueue(producer, eq)
 	if err != nil {
@@ -309,7 +309,7 @@ func emptyNotificationsChannel(nc <-chan *pq.Notification, timeout time.Duration
 	for {
 		select {
 		case _, open := <-nc:
-			if !open {
+			if len(nc) == 0 || !open {
 				return
 			}
 		case <-timer.C:
