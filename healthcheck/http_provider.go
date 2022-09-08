@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/codebgp/pg2kafka/http"
+	"go.uber.org/zap"
 )
 
 const (
@@ -21,7 +22,7 @@ const (
 type Checker func() error
 
 // EnableHTTPProvider is used for enabling healthcheck HTTP endpoint
-func EnableHTTPProvider(checker Checker, done <-chan struct{}) <-chan error {
+func EnableHTTPProvider(logger *zap.Logger, checker Checker, done <-chan struct{}) <-chan error {
 	var errors = make(chan error, 1)
 
 	serverPort, err := strconv.Atoi(getHealthCheckHTTPPort())
@@ -30,7 +31,7 @@ func EnableHTTPProvider(checker Checker, done <-chan struct{}) <-chan error {
 	}
 
 	go func() {
-		server, err := http.NewServer(serverPort, &[]http.Route{
+		server, err := http.NewServer("healthcheck", logger, serverPort, &[]http.Route{
 			{
 				Path:    theHTTPPath,
 				Method:  theHTTPMethod,

@@ -52,7 +52,7 @@ func main() {
 	)
 
 	// Setup healthcheck provider
-	_ = healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
+	_ = healthcheck.EnableProvider(L, healthcheck.NeverFailHealthCheck, done)
 
 	databaseURL := os.Getenv("DATABASE_URL")
 	topicVersion = os.Getenv("TOPIC_VERSION")

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	mux "github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 // Route is an HTTP route
@@ -18,15 +19,19 @@ type Route struct {
 
 // Server is the app server implementation
 type Server struct {
+	id     string
 	srv    *nhttp.Server
 	router *mux.Router
 	routes *[]Route
+	logger *zap.Logger
 }
 
 // NewServer creates a new server
-func NewServer(port int, routes *[]Route) (*Server, error) {
+func NewServer(id string, l *zap.Logger, port int, routes *[]Route) (*Server, error) {
 	r := mux.NewRouter()
 	s := Server{
+		id:     id,
+		logger: l,
 		srv: &nhttp.Server{
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: r,
@@ -54,25 +59,21 @@ func (s *Server) Run(done <-chan struct{}) error {
 		}
 	}()
 
-	// TODO replace with logging
-	// fmt.Printf("Server started\n")
+	s.logger.Info("HTTP Server started", zap.Any("id", s.id))
 
 	select {
 	case err := <-errors:
 		return err
 	case <-done:
-		// TODO replace with logging
-		// fmt.Printf("Server stopped\n")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer func() {
 			cancel()
+			s.logger.Info("HTTP Server stopped", zap.Any("id", s.id))
 		}()
 
 		if err := s.srv.Shutdown(ctx); err != nil {
 			return err
 		}
-		// TODO replace with logging
-		// fmt.Printf("Server exited properly")
 		return nil
 	}
 }
