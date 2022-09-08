@@ -140,6 +140,7 @@ func waitForNotification(
 	for {
 		select {
 		case <-l.Notify:
+			drainNotificationChannel(l.Notify, 100*time.Millisecond)
 			processQueue(p, eq)
 		case <-time.After(90 * time.Second):
 			go func() {
@@ -245,4 +246,18 @@ func parseTopicNamespace(topicNamespace string, databaseName string) string {
 	}
 
 	return s
+}
+
+func drainNotificationChannel(nc <-chan *pq.Notification, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	for {
+		select {
+		case _, open := <-nc:
+			if len(nc) == 0 || !open {
+				return
+			}
+		case <-timer.C:
+			return
+		}
+	}
 }
