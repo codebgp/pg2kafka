@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"time"
@@ -61,6 +62,13 @@ func New(conninfo string) (*Queue, error) {
 		return nil, err
 	}
 
+	go func() {
+		for {
+			<-time.After(10 * time.Second)
+			openConns := db.Stats().OpenConnections
+			fmt.Printf("eventqueue open connections: %d\n", openConns)
+		}
+	}()
 	return &Queue{db: db}, nil
 }
 
