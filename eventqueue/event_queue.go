@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"math"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/lib/pq"
@@ -18,15 +20,8 @@ const (
 	selectUnprocessedEventsQuery = `
 		SELECT id, uuid, external_id, table_name, statement, changed_fields, state, created_at
 		FROM pg2kafka.outbound_event_queue
-		WHERE processed = false
 		ORDER BY id ASC
 		LIMIT 1000
-	`
-
-	markEventAsProcessedQuery = `
-		UPDATE pg2kafka.outbound_event_queue
-		SET processed = true
-		WHERE id = $1 AND processed = false
 	`
 
 	deleteEventQuery = `
@@ -37,7 +32,6 @@ const (
 	countUnprocessedEventsQuery = `
 		SELECT count(*) AS count
 		FROM pg2kafka.outbound_event_queue
-		WHERE processed IS FALSE
 	`
 )
 
@@ -64,12 +58,24 @@ type Queue struct {
 	db *sql.DB
 }
 
+// DBConfig wraps database connection configuration parameters.
+type DBConfig struct {
+	DatabaseURL     string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+}
+
 // New creates a new Queue, connected to the given database URL.
-func New(conninfo string) (*Queue, error) {
-	db, err := sql.Open("postgres", conninfo)
+func New(c *DBConfig) (*Queue, error) {
+	applyDefaultConfig(c)
+
+	db, err := sql.Open("postgres", c.DatabaseURL)
 	if err != nil {
 		return nil, err
 	}
+
+	configureDB(db, c)
 
 	return &Queue{db: db}, nil
 }
@@ -131,12 +137,6 @@ func (eq *Queue) CountUnprocessedEvents() (int, error) {
 		return 0, err
 	}
 	return count, nil
-}
-
-// MarkEventAsProcessed marks an even as processed.
-func (eq *Queue) MarkEventAsProcessed(eventID int) error {
-	_, err := eq.db.Exec(markEventAsProcessedQuery, eventID)
-	return err
 }
 
 // DeleteEvent deletes an event.
@@ -213,4 +213,42 @@ func (b *ByteString) Scan(val interface{}) error {
 	}
 
 	return nil
+}
+
+// applyDefaultConfig applies default configuration.
+// Best practices: https://www.alexedwards.net/blog/configuring-sqldb
+func applyDefaultConfig(config *DBConfig) {
+	if config.MaxOpenConns == 0 {
+		config.MaxOpenConns = 10
+	}
+	if config.MaxIdleConns == 0 || config.MaxIdleConns > config.MaxOpenConns {
+		config.MaxIdleConns = config.MaxOpenConns
+	}
+	if config.ConnMaxLifetime == 0 {
+		config.ConnMaxLifetime = 5 * time.Minute
+	}
+	applyDefaultConnectTimeout(config, 10)
+}
+
+// applyDefaultConnectTimeout appennds connect_timeout to URL if not available.
+func applyDefaultConnectTimeout(config *DBConfig, timeout int) {
+	dbURL, err := url.Parse(config.DatabaseURL)
+	if err != nil {
+		return
+	}
+
+	_, found := dbURL.Query()["connect_timeout"]
+	if !found {
+		queryParams := dbURL.Query()
+		queryParams.Add("connect_timeout", strconv.FormatInt(int64(timeout), 10))
+		dbURL.RawQuery = queryParams.Encode()
+		config.DatabaseURL = dbURL.String()
+	}
+}
+
+// configureDB applies configuration to the database connection pool.
+func configureDB(db *sql.DB, config *DBConfig) {
+	db.SetMaxOpenConns(config.MaxOpenConns)
+	db.SetMaxIdleConns(config.MaxIdleConns)
+	db.SetConnMaxLifetime(config.ConnMaxLifetime)
 }

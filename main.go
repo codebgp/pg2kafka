@@ -54,11 +54,11 @@ func main() {
 	// Setup healthcheck provider
 	_ = healthcheck.EnableProvider(healthcheck.NeverFailHealthCheck, done)
 
-	conninfo := os.Getenv("DATABASE_URL")
+	databaseURL := os.Getenv("DATABASE_URL")
 	topicVersion = os.Getenv("TOPIC_VERSION")
-	topicNamespace = parseTopicNamespace(os.Getenv("TOPIC_NAMESPACE"), parseDatabaseName(conninfo))
+	topicNamespace = parseTopicNamespace(os.Getenv("TOPIC_NAMESPACE"), parseDatabaseName(databaseURL))
 
-	eq, err := eventqueue.New(conninfo)
+	eq, err := eventqueue.New(&eventqueue.DBConfig{DatabaseURL: databaseURL})
 	if err != nil {
 		L.Fatal("Error opening event queue db connection", zap.Error(err))
 	}
@@ -87,7 +87,7 @@ func main() {
 		}
 		L.Info("Received postgres notify event", zap.Any("event", pqNotifyEventToString(ev)))
 	}
-	listener := pq.NewListener(conninfo, 10*time.Second, time.Minute, reportProblem)
+	listener := pq.NewListener(databaseURL, 10*time.Second, time.Minute, reportProblem)
 	if err := listener.Listen("outbound_event_queue"); err != nil {
 		L.Fatal("Error listening to pg", zap.Error(err))
 	}
@@ -252,7 +252,7 @@ func setupProducer() Producer {
 	}
 
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
-		"client.id":         hostname,
+		"client.id":         fmt.Sprintf("pg2kafka-%s", hostname),
 		"bootstrap.servers": broker,
 		"partitioner":       "murmur2",
 		"compression.codec": "snappy",
