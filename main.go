@@ -164,13 +164,13 @@ func waitForNotification(
 	for {
 		select {
 		case <-l.Notify:
-			emptyNotificationsChannel(l.Notify, 100*time.Millisecond)
+			drainNotificationChannel(l.Notify, 100*time.Millisecond)
 			err := processQueue(p, eq)
 			if err != nil && len(errors) == 0 {
 				errors <- err
 			}
 		case <-errors:
-			emptyNotificationsChannel(l.Notify, 100*time.Millisecond)
+			drainNotificationChannel(l.Notify, 100*time.Millisecond)
 			err := processQueue(p, eq)
 			if err != nil && len(errors) == 0 {
 				errors <- err
@@ -311,7 +311,7 @@ func pqNotifyEventToString(ev pq.ListenerEventType) string {
 	}
 }
 
-func emptyNotificationsChannel(nc <-chan *pq.Notification, timeout time.Duration) {
+func drainNotificationChannel(nc <-chan *pq.Notification, timeout time.Duration) {
 	timer := time.NewTimer(timeout)
 	for {
 		select {

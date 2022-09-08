@@ -43,7 +43,7 @@ func TestTopicName(t *testing.T) {
 	}
 }
 
-func Test_emptyNotificationsChannel(t *testing.T) {
+func Test_drainNotificationsChannel(t *testing.T) {
 	t.Parallel()
 
 	type args struct {
@@ -77,7 +77,7 @@ func Test_emptyNotificationsChannel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.prepareFunc(&tt.args)
 
-			emptyNotificationsChannel(tt.args.nc, tt.args.timeout)
+			drainNotificationChannel(tt.args.nc, tt.args.timeout)
 
 			tt.assertFunc(t, &tt.args)
 		})
