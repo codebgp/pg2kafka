@@ -79,8 +79,10 @@ func main() {
 
 	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
-			L.Error("Error handling postgres notify", zap.Error(err))
+			L.Info("Received postgres error notify", zap.Any("event", pqNotifyEventToString(ev)), zap.Error(err))
+			return
 		}
+		L.Info("Received postgres notify event", zap.Any("event", pqNotifyEventToString(ev)))
 	}
 	listener := pq.NewListener(conninfo, 10*time.Second, time.Minute, reportProblem)
 	if err := listener.Listen("outbound_event_queue"); err != nil {
@@ -259,5 +261,20 @@ func drainNotificationChannel(nc <-chan *pq.Notification, timeout time.Duration)
 		case <-timer.C:
 			return
 		}
+	}
+}
+
+func pqNotifyEventToString(ev pq.ListenerEventType) string {
+	switch ev {
+	case pq.ListenerEventConnected:
+		return "connected"
+	case pq.ListenerEventDisconnected:
+		return "disconnected"
+	case pq.ListenerEventConnectionAttemptFailed:
+		return "connection attempt failed"
+	case pq.ListenerEventReconnected:
+		return "reconnected"
+	default:
+		return "unknown"
 	}
 }
