@@ -1,5 +1,5 @@
 REGISTRY_NAME?=docker.io/codebgp
-IMAGE_VERSION?=0.3.1
+IMAGE_VERSION?=0.3.2
 
 pre-commit-run-all:
 	GOARCH=amd64 CGO_ENABLED=1 pre-commit run --all-files

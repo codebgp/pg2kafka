@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +55,12 @@ func main() {
 	conninfo := os.Getenv("DATABASE_URL")
 	topicVersion = os.Getenv("TOPIC_VERSION")
 	topicNamespace = parseTopicNamespace(os.Getenv("TOPIC_NAMESPACE"), parseDatabaseName(conninfo))
+	drainInterval := 10 * time.Millisecond // default to 10ms
+	drainIntervalMillisStr := os.Getenv("LISTEN_CHANNEL_DRAIN_INTERVAL_MILLIS")
+	if drainIntervalMillisStr != "" {
+		intVal, _ := strconv.Atoi(drainIntervalMillisStr)
+		drainInterval = time.Duration(int64(intVal)) * time.Millisecond
+	}
 
 	eq, err := eventqueue.New(conninfo)
 	if err != nil {
@@ -108,7 +115,7 @@ func main() {
 	processQueue(producer, eq)
 
 	L.Info(fmt.Sprintf("pg2kafka[commit:%s] is now listening to notifications", Version))
-	waitForNotification(listener, producer, eq, done)
+	waitForNotification(listener, producer, eq, drainInterval, done)
 }
 
 // ProcessEvents queries the database for unprocessed events and produces them
@@ -137,12 +144,13 @@ func waitForNotification(
 	l *pq.Listener,
 	p Producer,
 	eq *eventqueue.Queue,
+	drainInterval time.Duration,
 	done chan struct{},
 ) {
 	for {
 		select {
 		case <-l.Notify:
-			drainNotificationChannel(l.Notify, 100*time.Millisecond)
+			drainNotificationChannel(l.Notify, drainInterval)
 			processQueue(p, eq)
 		case <-time.After(90 * time.Second):
 			go func() {
